@@ -1,0 +1,148 @@
+import os.path
+import re
+
+import openpyxl
+import pandas
+import pandas as pd
+import glob
+
+from openpyxl.reader.excel import load_workbook
+from openpyxl.styles import PatternFill
+from openpyxl.utils import get_column_letter
+
+
+def reset_col(wb):
+    for sheet in wb.sheetnames:
+        ws = wb[sheet]
+        for col in ws.columns:
+            max_length = max([
+                len(str(cell.value)) + 0.7 * len(re.findall(r'([\u4e00-\u9fa5])', str(cell.value)))
+                for cell in col
+            ])
+            ws.column_dimensions[col[0].column_letter].width = (max_length + 2) * 1.2
+
+
+# for path, filename in [
+#     (r'D:\222\PTS\*\*frequent.csv', r'D:\222\frequent.csv'),
+#     # (r'D:\222\PTS\*\*taskovertime.csv', r'D:\222\taskovertime.csv'),
+#     # (r'D:\222\PTS\*\*timerovertime.csv', r'D:\222\timerovertime.csv'),
+#     # (r'D:\222\PTS\*\*capi.csv', r'D:\222\capi.csv'),
+#     # (r'D:\222\PTS\*\*blacklist.csv', r'D:\222\blacklist.csv'),
+#     # (r'D:\222\PTS\*\*opcua.csv', r'D:\222\opcua.csv'),
+# ]:
+#     print(path, filename)
+#     files = glob.glob(path)
+#     print(len(files))
+#     files = list(set(files))
+#     print(len(files))
+#     all_data = []
+#
+#     for file in files:
+#         df = pd.read_csv(file)
+#         all_data.append(df)
+#     merged_df = pd.concat(all_data)
+#     merged_df.drop_duplicates(inplace=True)
+#     merged_df.to_csv(filename, index=False, encoding='utf_8_sig')
+def runn():
+    for path in glob.glob(r'D:\\222\\EMS\\all_combine\\frequent.csv'):
+        print(path)
+        df = pd.read_csv(path, encoding='utf_8_sig')
+        df['time_diff'] = (pd.to_datetime(df['最后一次打印时间']) - pd.to_datetime(df['第一次打印'])).dt.total_seconds()
+        df['每秒打印次数'] = df['日志重复次数'] / df['time_diff']
+        col1 = df.pop('time_diff')
+        col2 = df.pop('每秒打印次数')
+        df.insert(loc=df.columns.get_loc('日志重复次数') + 1, column='time_diff', value=col1)
+        df.insert(loc=df.columns.get_loc('日志重复次数') + 2, column='每秒打印次数', value=col2)
+        new_path = os.path.join(os.path.dirname(path), 'frequent-new.xlsx')
+        print(new_path)
+        df.to_excel(new_path, index=False)
+        wb = openpyxl.load_workbook(new_path)
+        ws = wb.active
+        red_fill = PatternFill(start_color='FFAE42', end_color='FFAE42', fill_type='solid')
+        for index, row in df.iterrows():
+            if row['每秒打印次数'] > 2:
+                for col_index, value in enumerate(row):
+                    cell = ws.cell(row=index + 2, column=col_index + 1)
+                    cell.fill = red_fill
+        reset_col(wb)
+        wb.save(new_path)
+
+runn()
+
+import re
+from datetime import datetime, timedelta
+
+import openpyxl
+import pandas as pd
+import requests
+
+url = 'http://10.121.238.30/sysupgrade_duration_statistics.log'
+response = requests.get(url)
+pattern = r'\d{4}-\d{2}-\d{2}.*;'
+match = re.findall(pattern, response.text)
+pattern1 = r"client_push耗时：(\d+:\d+:\d+\.\d+);"
+pattern2 = r"ecs_upgrade -all耗时：(\d+:\d+:\d+\.\d+);"
+pattern3 = r"ecs_active -all耗时：(\d+:\d+:\d+\.\d+);"
+pattern4 = r"ecs_check -t post_upgrade耗时：(\d+:\d+:\d+\.\d+);"
+pattern5 = r'\d{4}-\d{2}-\d{2}'
+aaa = []
+for i in match:
+    bbb = {}
+    result = re.findall(pattern5, i)
+    bbb['time'] = result[0] if len(result) == 1 else None
+    result = re.findall(pattern1, i)
+    bbb['client_push'] = result[0] if len(result) == 1 else None
+    result = re.findall(pattern2, i)
+    bbb['ecs_upgrade -all'] = result[0] if len(result) == 1 else None
+    result = re.findall(pattern3, i)
+    bbb['ecs_active -all'] = result[0] if len(result) == 1 else None
+    result = re.findall(pattern4, i)
+    bbb['ecs_check -t post_upgrade'] = result[0] if len(result) == 1 else None
+    aaa.append(bbb)
+    # break
+
+
+# print(aaa)
+def time_to_seconds(time_str):
+    if time_str:
+        time_obj = datetime.strptime(time_str, '%H:%M:%S.%f')
+        seconds = (time_obj.hour * 3600) + (time_obj.minute * 60) + time_obj.second
+        return seconds
+
+
+df = pd.DataFrame(aaa)
+df['client_push'] = df['client_push'].apply(time_to_seconds)
+df['ecs_upgrade -all'] = df['ecs_upgrade -all'].apply(time_to_seconds)
+df['ecs_active -all'] = df['ecs_active -all'].apply(time_to_seconds)
+df['ecs_check -t post_upgrade'] = df['ecs_check -t post_upgrade'].apply(time_to_seconds)
+df['结果'] = df.apply(lambda x: '成功' if x.isnull().any() else '失败', axis=1)
+grouped = df.groupby('time')
+
+
+def dst_time(*args):
+    return 300
+
+
+result = grouped.agg({
+    'client_push': ['count', 'mean', 'max', 'min', dst_time],
+    'ecs_upgrade -all': ['count', 'mean', 'max', 'min', dst_time],
+    'ecs_active -all': ['count', 'mean', 'max', 'min', dst_time],
+    'ecs_check -t post_upgrade': ['count', 'mean', 'max', 'min', dst_time],
+})
+file = r'D:\111\output.xlsx'
+result.to_excel(file)
+
+wb = openpyxl.load_workbook(file)
+ws = wb['Sheet1']
+cols = ['C', 'D', 'E', 'F', 'H', 'I', 'J', 'K', "M", 'N', 'O', 'P', 'R', 'S', 'T', 'U']
+for col in cols:
+    column = ws[col]
+    for cell in column[3:]:
+        # 将单元格的值转换为时间格式
+        if cell.value:
+            time = datetime.min + timedelta(seconds=int(cell.value))
+            # 将时间格式转换为字符串格式
+            time_str = time.strftime('%H:%M:%S')
+            # 将字符串写入单元格
+            cell.value = time_str
+wb.save(file)
