@@ -76,7 +76,10 @@ import openpyxl
 import pandas as pd
 import requests
 
-url = 'http://10.121.238.30/sysupgrade_duration_statistics.log'
+# url = 'http://10.121.238.30/sysupgrade_duration_statistics.log'
+url = input('请输入日志网址:')
+file = rf'D:\Time.xlsx'
+file1 = r'D:\TimeStatistics.xlsx'
 response = requests.get(url)
 pattern = r'\d{4}-\d{2}-\d{2}.*;'
 match = re.findall(pattern, response.text)
@@ -102,7 +105,6 @@ for i in match:
     # break
 
 
-# print(aaa)
 def time_to_seconds(time_str):
     if time_str:
         time_obj = datetime.strptime(time_str, '%H:%M:%S.%f')
@@ -115,7 +117,11 @@ df['client_push'] = df['client_push'].apply(time_to_seconds)
 df['ecs_upgrade -all'] = df['ecs_upgrade -all'].apply(time_to_seconds)
 df['ecs_active -all'] = df['ecs_active -all'].apply(time_to_seconds)
 df['ecs_check -t post_upgrade'] = df['ecs_check -t post_upgrade'].apply(time_to_seconds)
-df['结果'] = df.apply(lambda x: '成功' if x.isnull().any() else '失败', axis=1)
+df['结果'] = df.apply(lambda x: 'fail' if x.isnull().any() else 'success', axis=1)
+# print(df)
+
+df.to_excel(file)
+
 grouped = df.groupby('time')
 
 
@@ -123,18 +129,34 @@ def dst_time(*args):
     return 300
 
 
-result = grouped.agg({
-    'client_push': ['count', 'mean', 'max', 'min', dst_time],
-    'ecs_upgrade -all': ['count', 'mean', 'max', 'min', dst_time],
-    'ecs_active -all': ['count', 'mean', 'max', 'min', dst_time],
-    'ecs_check -t post_upgrade': ['count', 'mean', 'max', 'min', dst_time],
-})
-file = r'D:\111\output.xlsx'
-result.to_excel(file)
+def dst_time1(*args):
+    return 600
 
-wb = openpyxl.load_workbook(file)
+
+def dst_time2(*args):
+    return 5400
+
+
+def success(result_list):
+    return result_list.str.count('success').sum()
+
+
+result = grouped.agg({
+    '结果': ['count', success],
+    'client_push': ['mean', 'max', 'min', dst_time],
+    'ecs_upgrade -all': ['mean', 'max', 'min', dst_time2],
+    'ecs_active -all': ['mean', 'max', 'min', dst_time1],
+    'ecs_check -t post_upgrade': ['mean', 'max', 'min', dst_time],
+
+})
+
+# print(result)
+
+result.to_excel(file1)
+#
+wb = openpyxl.load_workbook(file1)
 ws = wb['Sheet1']
-cols = ['C', 'D', 'E', 'F', 'H', 'I', 'J', 'K', "M", 'N', 'O', 'P', 'R', 'S', 'T', 'U']
+cols = ['D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', "M", 'N', 'O', 'P', 'Q', 'R', 'S']
 for col in cols:
     column = ws[col]
     for cell in column[3:]:
@@ -145,4 +167,25 @@ for col in cols:
             time_str = time.strftime('%H:%M:%S')
             # 将字符串写入单元格
             cell.value = time_str
-wb.save(file)
+ws['A1'].value = '时间'
+ws['A3'].value = None
+replace_dict = {
+    'count': '总次数',
+    'success': '成功次数',
+    'mean': '平均值',
+    'max': '最大值',
+    'min': '最小值',
+    'dst_time': '目标值',
+    'dst_time1': '目标值',
+    'dst_time2': '目标值',
+}
+for row in ws.iter_rows():
+    # 判断是否为空行
+    if all(cell.value is None for cell in row):
+        # 删除空行
+        ws.delete_rows(row[0].row, 1)
+    for cell in row:
+        if cell.value in replace_dict:
+            cell.value = replace_dict[cell.value]
+wb.save(file1)
+
