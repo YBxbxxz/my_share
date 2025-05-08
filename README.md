@@ -9,10 +9,11 @@ This is a command-line file sharing tool, which has just a single file and is ea
 - Password sharing
 - TLS support
 - Zstd compression support (requires [python-zstandard](https://github.com/indygreg/python-zstandard) library, but is optional)
+- QR code support (requires [python-qrcode](https://github.com/lincolnloop/python-qrcode) library, but is optional)
 
 # Usage
 ```
-usage: share.py [-b ADDRESS] [-p PORT] [-s] [-r] [-a] [-t] [-P [PASSWORD]] [-h] [--certfile CERTFILE] [--keyfile KEYFILE] [--keypass KEYPASS] [arguments ...]
+usage: share.py [-b ADDRESS] [-p PORT] [-s] [-r] [-a] [-z] [-t] [-P [PASSWORD]] [-q] [-h] [--certfile CERTFILE] [--keyfile KEYFILE] [--keypass KEYPASS] [arguments ...]
 
 positional arguments:
   arguments             a directory, files or texts
@@ -24,9 +25,11 @@ general options:
   -s, --share           share mode (default mode)
   -r, --receive         receive mode, can be used with -s option (only for directory)
   -a, --all             show all files, including hidden ones, only for directory
+  -z, --archive         share the directory itself as an archive, only for directory
   -t, --text            for text
   -P [PASSWORD], --password [PASSWORD]
                         access password, if no PASSWORD is specified, the environment variable SHARE_PASSWORD will be used
+  -q, --qrcode          show the qrcode
   -h, --help            show this help message and exit
 
 tls options:
@@ -51,10 +54,10 @@ tls options:
     ```bash
     curl -OJ http://{host}:{port}/file
     ```
-- To download an archive of a folder or a compressed file, you can add one of the following extensions to the url:
-    - `.tar` for the folder, without compression
-    - `.tzst` or `.tar.zst` for the folder, with compression (requires [python-zstandard](https://github.com/indygreg/python-zstandard) library)
-    - `.zst` for the file (requires [python-zstandard](https://github.com/indygreg/python-zstandard) library)
+- To get an archive of a folder, you can add the `.tar.zst` extension to the url:
+    ```bash
+    http://{host}:{port}/any/folder.tar.zst
+    ```
 - If you want to upload files to the sharing server with `curl`, you can use:
     ```bash
     curl -F file=@/path/to/file http://{host}:{port}
